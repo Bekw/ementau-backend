@@ -15,13 +15,14 @@ import (
 const (
 	supplyRequestColumns = `request_id, building_id, status, employee_id, comment, rowversion, parent_request_id`
 	supplyItemColumns    = `item_id, request_id, material_id, quantity, comment, price,
-		received_status, received_quantity, supplier_id`
+		received_status, received_quantity, supplier_id, unit_type_id`
 )
 
 type supplyItemInput struct {
 	MaterialID int     `json:"material_id"`
 	Quantity   float64 `json:"quantity"`
 	Comment    string  `json:"comment"`
+	UnitTypeID *int    `json:"unit_type_id"`
 }
 
 type createSupplyRequestInput struct {
@@ -491,6 +492,7 @@ func (h *SupplyRequestHandler) CreateRestock(c *gin.Context) {
 			MaterialID: it.MaterialID,
 			Quantity:   qty,
 			Comment:    it.Comment,
+			UnitTypeID: it.UnitTypeID,
 		})
 	}
 
@@ -582,10 +584,10 @@ func (h *SupplyRequestHandler) respondStatusErr(c *gin.Context, err error) {
 // insertSupplyItems inserts the given items for a request within a transaction.
 func insertSupplyItems(tx *sqlx.Tx, requestID int, items []supplyItemInput) error {
 	const q = `INSERT INTO public.supply_request_item_tab
-		(request_id, material_id, quantity, comment)
-		VALUES ($1, $2, $3, $4)`
+		(request_id, material_id, quantity, comment, unit_type_id)
+		VALUES ($1, $2, $3, $4, $5)`
 	for _, item := range items {
-		if _, err := tx.Exec(q, requestID, item.MaterialID, item.Quantity, item.Comment); err != nil {
+		if _, err := tx.Exec(q, requestID, item.MaterialID, item.Quantity, item.Comment, item.UnitTypeID); err != nil {
 			return err
 		}
 	}

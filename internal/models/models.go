@@ -130,6 +130,7 @@ type SupplyRequestItem struct {
 	ReceivedStatus   *string  `db:"received_status"   json:"received_status"`
 	ReceivedQuantity *float64 `db:"received_quantity" json:"received_quantity"`
 	SupplierID       *int     `db:"supplier_id"       json:"supplier_id"`
+	UnitTypeID       *int     `db:"unit_type_id"      json:"unit_type_id"`
 }
 
 // Building maps to public.building_tab.
