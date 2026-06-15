@@ -322,12 +322,6 @@ func (h *SupplyRequestHandler) Receive(c *gin.Context) {
 		return
 	}
 
-	employeeID, ok := currentUserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user context"})
-		return
-	}
-
 	var req models.SupplyRequest
 	const reqQ = `SELECT ` + supplyRequestColumns + `
 		FROM public.supply_request_tab WHERE request_id = $1`
@@ -380,44 +374,6 @@ func (h *SupplyRequestHandler) Receive(c *gin.Context) {
 
 	if _, err := tx.Exec(
 		`UPDATE public.supply_request_tab SET status = 'received' WHERE request_id = $1`, requestID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// One expense record in finance_tab for the whole delivery.
-	var financeTypeID int
-	const ftQ = `SELECT finance_type_id FROM public.finance_type_tab WHERE finance_type_code = 'material' LIMIT 1`
-	if err := tx.Get(&financeTypeID, ftQ); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Не найден тип финанса 'material'"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	var total float64
-	const totalQ = `SELECT COALESCE(SUM(received_quantity * price), 0)
-		FROM public.supply_request_item_tab
-		WHERE request_id = $1 AND received_status != 'not_delivered'`
-	if err := tx.Get(&total, totalQ, requestID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Resolve the project so the expense is attached to both project and building.
-	var projectID int
-	if err := tx.Get(&projectID,
-		`SELECT project_id FROM public.building_tab WHERE building_id = $1`, req.BuildingID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	const insertFinance = `INSERT INTO public.finance_tab
-		(finance_type_id, finance_description, finance_file_name, finance_file_url, employee_id, project_id, building_id, amount, rowversion)
-		VALUES ($1, $2, '', '', $3, $4, $5, $6, NOW())`
-	description := fmt.Sprintf("Поставка по заявке #%d", requestID)
-	if _, err := tx.Exec(insertFinance, financeTypeID, description, employeeID, projectID, req.BuildingID, total); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

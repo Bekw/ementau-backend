@@ -47,6 +47,8 @@ func (h *FinanceHandler) Register(rg *gin.RouterGroup) {
 	rg.POST("/projects/:id/finances", h.CreateForProject)
 	rg.DELETE("/projects/:id/finances/:finance_id", h.DeleteByProject)
 	rg.GET("/projects/:id/balance", h.ProjectBalance)
+	// Attach/replace a receipt file on an existing finance record.
+	rg.PUT("/finances/:finance_id/file", h.UpdateFile)
 }
 
 // parseFinanceForm reads the shared multipart fields used by both create paths.
@@ -258,6 +260,43 @@ func (h *FinanceHandler) DeleteByProject(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+// UpdateFile attaches or replaces the receipt file on an existing finance record.
+func (h *FinanceHandler) UpdateFile(c *gin.Context) {
+	financeID, err := strconv.Atoi(c.Param("finance_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid finance id"})
+		return
+	}
+
+	// The file is required for this endpoint.
+	if _, ferr := c.FormFile("file"); ferr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Файл не выбран"})
+		return
+	}
+
+	fileName, fileURL, err := saveFinanceFile(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
+		return
+	}
+
+	res, err := h.db.Exec(
+		`UPDATE public.finance_tab SET finance_file_name = $1, finance_file_url = $2 WHERE finance_id = $3`,
+		fileName, fileURL, financeID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "finance not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"finance_file_name": fileName,
+		"finance_file_url":  fileURL,
+	})
 }
 
 func (h *FinanceHandler) BuildingBalance(c *gin.Context) {
